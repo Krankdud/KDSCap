@@ -12,6 +12,7 @@ bool init(SDL_Window** window, SDL_Renderer** renderer, SDL_Texture** texture);
 void captureFrame(uint16_t* dsFrameBuffer, uint8_t* rgbaFrameBuffer, SDL_Texture* texture);
 void destroyAll(SDL_Window* window, SDL_Renderer* renderer, SDL_Texture* texture);
 void resizeWindow(SDL_Window* window, int scale, screen_mode mode);
+void setWindowTitle(SDL_Window* window, screen_mode mode, unsigned int framerate);
 void BGRtoRGBA(uint8_t* out, uint16_t* in);
 
 int main(int argc, char* argv[])
@@ -25,6 +26,9 @@ int main(int argc, char* argv[])
     bool quit = false;
     int scale = 1;
     screen_mode screenMode = Vertical;
+    unsigned int frameCounter = 0;
+    unsigned int lastTime = 0;
+    unsigned int currentTime;
 
     if (!init(&window, &renderer, &texture))
     {
@@ -88,6 +92,15 @@ int main(int argc, char* argv[])
             SDL_RenderCopy(renderer, texture, &src, NULL);
         }
         SDL_RenderPresent(renderer);
+
+        ++frameCounter;
+        currentTime = SDL_GetTicks();
+        if (currentTime - lastTime >= 1000)
+        {
+            setWindowTitle(window, screenMode, frameCounter);
+            frameCounter = 0;
+            lastTime = currentTime;
+        }
     }
 
     destroyAll(window, renderer, texture);
@@ -116,7 +129,7 @@ bool init(SDL_Window ** window, SDL_Renderer ** renderer, SDL_Texture ** texture
         return false;
     }
 
-    *renderer = SDL_CreateRenderer(*window, -1, SDL_RENDERER_ACCELERATED);
+    *renderer = SDL_CreateRenderer(*window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (*renderer == NULL)
     {
         printf("Could not create renderer: %s\n", SDL_GetError());
@@ -173,22 +186,39 @@ void resizeWindow(SDL_Window* window, int scale, screen_mode mode)
     switch (mode)
     {
         case Vertical:
-            SDL_SetWindowTitle(window, "KDSCap - Vertical DS");
             SDL_SetWindowSize(window, SCREEN_WIDTH * scale, SCREEN_HEIGHT * scale);
             break;
         case Horizontal:
-            SDL_SetWindowTitle(window, "KDSCap - Horizontal DS");
             SDL_SetWindowSize(window, DS_WIDTH * 2 * scale, DS_HEIGHT * scale);
             break;
         case GBABottom:
-            SDL_SetWindowTitle(window, "KDSCap - GBA Bottom");
             SDL_SetWindowSize(window, GBA_WIDTH * scale, GBA_HEIGHT * scale);
             break;
         case GBATop:
-            SDL_SetWindowTitle(window, "KDSCap - GBA Top");
             SDL_SetWindowSize(window, GBA_WIDTH * scale, GBA_HEIGHT * scale);
             break;
     }
+}
+
+void setWindowTitle(SDL_Window* window, screen_mode mode, unsigned int framerate)
+{
+    char buffer[80];
+    switch (mode)
+    {
+        case Vertical:
+            snprintf(buffer, 80, "KDSCap - Vertical DS - %d fps", framerate);
+            break;
+        case Horizontal:
+            snprintf(buffer, 80, "KDSCap - Horizontal DS - %d fps", framerate);
+            break;
+        case GBABottom:
+            snprintf(buffer, 80, "KDSCap - GBA Bottom - %d fps", framerate);
+            break;
+        case GBATop:
+            snprintf(buffer, 80, "KDSCap - GBA Top - %d fps", framerate);
+            break;
+    }
+    SDL_SetWindowTitle(window, buffer);
 }
 
 // Taken from the DS capture sample code, don't understand the magic values yet
