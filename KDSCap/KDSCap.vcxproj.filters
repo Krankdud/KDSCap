@@ -24,12 +24,18 @@
     <ClCompile Include="screenmodes.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="win_dscapture.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="dscapture.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="screenmodes.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="win_dscapture.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

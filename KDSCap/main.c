@@ -2,7 +2,8 @@
 #include <memory.h>
 #include <stdio.h>
 #include <stdbool.h>
-#include "dscapture.h"
+#include "win_dscapture.h"
+//#include "dscapture.h"
 #include "screenmodes.h"
 
 const int SCREEN_WIDTH = DS_WIDTH;
@@ -73,7 +74,7 @@ int main(int argc, char* argv[])
             }
         }
 
-        captureFrame(dsFrameBuffer, rgbaFrameBuffer, texture);
+        //captureFrame(dsFrameBuffer, rgbaFrameBuffer, texture);
 
         SDL_Rect src = getSrcRectForMode(screenMode);
         if (screenMode == Horizontal)
@@ -144,7 +145,7 @@ bool init(SDL_Window ** window, SDL_Renderer ** renderer, SDL_Texture ** texture
         return false;
     }
 
-    if (!dscapture_init())
+    if (!win_dscapture_init())
     {
         printf("Could not initialize DS capture\n");
         return false;
@@ -158,6 +159,7 @@ void captureFrame(uint16_t* dsFrameBuffer, uint8_t* rgbaFrameBuffer, SDL_Texture
     static void* pixels;
     static int pitch;
 
+    /*
     if (!dscapture_grabFrame(dsFrameBuffer))
     {
         printf("Could not grab frame from DS capture\n");
@@ -169,12 +171,13 @@ void captureFrame(uint16_t* dsFrameBuffer, uint8_t* rgbaFrameBuffer, SDL_Texture
         memcpy(pixels, rgbaFrameBuffer, DS_WIDTH * DS_HEIGHT * 2 * 4);
         SDL_UnlockTexture(texture);
     }
+    */
 }
 
 // Destroys SDL objects and deinitializes DS capture.
 void destroyAll(SDL_Window* window, SDL_Renderer* renderer, SDL_Texture* texture)
 {
-    dscapture_deinit();
+    win_dscapture_deinit();
 
     SDL_DestroyTexture(texture);
     SDL_DestroyRenderer(renderer);
