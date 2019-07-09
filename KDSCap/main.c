@@ -74,7 +74,7 @@ int main(int argc, char* argv[])
             }
         }
 
-        //captureFrame(dsFrameBuffer, rgbaFrameBuffer, texture);
+        captureFrame(dsFrameBuffer, rgbaFrameBuffer, texture);
 
         SDL_Rect src = getSrcRectForMode(screenMode);
         if (screenMode == Horizontal)
@@ -130,7 +130,7 @@ bool init(SDL_Window ** window, SDL_Renderer ** renderer, SDL_Texture ** texture
         return false;
     }
 
-    *renderer = SDL_CreateRenderer(*window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    *renderer = SDL_CreateRenderer(*window, -1, SDL_RENDERER_ACCELERATED);
     if (*renderer == NULL)
     {
         printf("Could not create renderer: %s\n", SDL_GetError());
@@ -159,8 +159,7 @@ void captureFrame(uint16_t* dsFrameBuffer, uint8_t* rgbaFrameBuffer, SDL_Texture
     static void* pixels;
     static int pitch;
 
-    /*
-    if (!dscapture_grabFrame(dsFrameBuffer))
+    if (!win_dscapture_grabFrame(dsFrameBuffer))
     {
         printf("Could not grab frame from DS capture\n");
     }
@@ -171,7 +170,6 @@ void captureFrame(uint16_t* dsFrameBuffer, uint8_t* rgbaFrameBuffer, SDL_Texture
         memcpy(pixels, rgbaFrameBuffer, DS_WIDTH * DS_HEIGHT * 2 * 4);
         SDL_UnlockTexture(texture);
     }
-    */
 }
 
 // Destroys SDL objects and deinitializes DS capture.
