@@ -18,9 +18,6 @@
     <ClCompile Include="main.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="dscapture.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="screenmodes.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -29,9 +26,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="dscapture.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="screenmodes.h">
       <Filter>Header Files</Filter>
     </ClInclude>

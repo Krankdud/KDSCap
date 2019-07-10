@@ -12,6 +12,7 @@ typedef struct _DeviceData
     HANDLE deviceHandle;
     char devicePath[260];
     unsigned char bulkPipeInId;
+    unsigned short maxPacketSize;
 } DeviceData;
 
 typedef struct _UsbDeviceRequest
@@ -37,6 +38,7 @@ bool queryDeviceEndpoints();
 bool sendToDefaultEndpoint(uint8_t request, uint16_t value, uint16_t length, uint8_t* buf);
 bool recvFromDefaultEndpoint(uint8_t request, uint16_t length, uint8_t* buf);
 bool readFromBulk(uint8_t* buf, int length, int* transferred);
+bool getMaximumTransferSize(unsigned long* mts);
 
 bool win_dscapture_init()
 {
@@ -69,6 +71,14 @@ bool win_dscapture_init()
     if (!queryDeviceEndpoints())
     {
         printf("Couldn't query device endpoints\n");
+        closeDevice();
+        return false;
+    }
+
+    bool rawIO = true;
+    if (!WinUsb_SetPipePolicy(deviceData.winusbHandle, deviceData.bulkPipeInId, RAW_IO, sizeof(bool), &rawIO))
+    {
+        printf("Couldn't set pipe policy: %d\n", GetLastError());
         closeDevice();
         return false;
     }
@@ -281,8 +291,9 @@ bool queryDeviceEndpoints()
                 {
                     if (USB_ENDPOINT_DIRECTION_IN(pipe.PipeId))
                     {
-                        printf("Endpoint index: %d - Pipe type: Bulk - Pipe ID: 0x%x\n", i, pipe.PipeId);
+                        printf("Endpoint index: %d - Pipe type: Bulk - Pipe ID: 0x%x - Maximum packet size: %d\n", i, pipe.PipeId, pipe.MaximumPacketSize);
                         deviceData.bulkPipeInId = pipe.PipeId;
+                        deviceData.maxPacketSize = pipe.MaximumPacketSize;
                     }
                 }
             }
@@ -342,7 +353,7 @@ bool recvFromDefaultEndpoint(uint8_t request, uint16_t length, uint8_t* buf)
     setupPacket.Length = length;
 
     unsigned long sent;
-    result = WinUsb_ControlTransfer(deviceData.winusbHandle, setupPacket, buf, length, &sent, 0);
+    result = WinUsb_ControlTransfer(deviceData.winusbHandle, setupPacket, buf, length, &sent, NULL);
     return result;
 }
 
@@ -354,6 +365,19 @@ bool readFromBulk(uint8_t* buf, int length, int* transferred)
     }
     
     bool result = true;
-    result = WinUsb_ReadPipe(deviceData.winusbHandle, deviceData.bulkPipeInId, buf, length, transferred, 0);
+    result = WinUsb_ReadPipe(deviceData.winusbHandle, deviceData.bulkPipeInId, buf, length, transferred, NULL);
+    return result;
+}
+
+bool getMaximumTransferSize(unsigned long* mts)
+{
+    unsigned long length = sizeof(unsigned long);
+
+    bool result = WinUsb_GetPipePolicy(deviceData.winusbHandle, deviceData.bulkPipeInId, 0x08, &length, mts);
+    if (!result)
+    {
+        printf("Couldn't get maximum transfer size: %d\n", GetLastError());
+    }
+
     return result;
 }

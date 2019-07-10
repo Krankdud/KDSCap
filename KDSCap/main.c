@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include "win_dscapture.h"
-//#include "dscapture.h"
 #include "screenmodes.h"
 
 const int SCREEN_WIDTH = DS_WIDTH;
@@ -138,7 +137,7 @@ bool init(SDL_Window ** window, SDL_Renderer ** renderer, SDL_Texture ** texture
     }
 
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
-    *texture = SDL_CreateTexture(*renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, DS_WIDTH, DS_HEIGHT * 2);
+    *texture = SDL_CreateTexture(*renderer, SDL_PIXELFORMAT_RGB565, SDL_TEXTUREACCESS_STREAMING, DS_WIDTH, DS_HEIGHT * 2);
     if (*texture == NULL)
     {
         printf("Could not create texture: %s\n", SDL_GetError());
@@ -165,9 +164,9 @@ void captureFrame(uint16_t* dsFrameBuffer, uint8_t* rgbaFrameBuffer, SDL_Texture
     }
     else
     {
-        BGRtoRGBA(rgbaFrameBuffer, dsFrameBuffer);
+        //BGRtoRGBA(rgbaFrameBuffer, dsFrameBuffer);
         SDL_LockTexture(texture, NULL, &pixels, &pitch);
-        memcpy(pixels, rgbaFrameBuffer, DS_WIDTH * DS_HEIGHT * 2 * 4);
+        memcpy(pixels, dsFrameBuffer, DS_WIDTH * DS_HEIGHT * 2 * 2);
         SDL_UnlockTexture(texture);
     }
 }
