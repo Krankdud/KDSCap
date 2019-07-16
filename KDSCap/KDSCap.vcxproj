@@ -131,9 +131,9 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="main.c" />
-    <ClCompile Include="screenmodes.c" />
-    <ClCompile Include="win_dscapture.c" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="screenmodes.cpp" />
+    <ClCompile Include="win_dscapture.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="screenmodes.h" />

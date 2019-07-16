@@ -1,3 +1,4 @@
+#include <stdexcept>
 #include "win_dscapture.h"
 
 typedef struct _UsbDeviceRequest
@@ -23,10 +24,10 @@ DSCapture::DSCapture()
     if (FAILED(hr))
     {
         printf("Failed looking for device, HRESULT 0x%x\n", hr);
-        return false;
+        throw std::runtime_error("Could not open device");
     }
 
-    bool result = WinUsb_GetDescriptor(deviceData.winusbHandle,
+    bool result = WinUsb_GetDescriptor(winusbHandle,
                                        USB_DEVICE_DESCRIPTOR_TYPE,
                                        0,
                                        0,
@@ -37,7 +38,7 @@ DSCapture::DSCapture()
     {
         printf("Error among LastError %d or lengthReceived %d\n", result == false ? GetLastError() : 0, lengthReceived);
         closeDevice();
-        return false;
+        throw std::runtime_error("Could not open device");
     }
 
     printf("Device found: VID_%04X&PID_%04X\n", deviceDesc.idVendor, deviceDesc.idProduct);
@@ -46,26 +47,24 @@ DSCapture::DSCapture()
     {
         printf("Couldn't query device endpoints\n");
         closeDevice();
-        return false;
+        throw std::runtime_error("Could not query device endpoints");
     }
 
     bool rawIO = true;
-    if (!WinUsb_SetPipePolicy(deviceData.winusbHandle, deviceData.bulkPipeInId, RAW_IO, sizeof(bool), &rawIO))
+    if (!WinUsb_SetPipePolicy(winusbHandle, bulkPipeInId, RAW_IO, sizeof(bool), &rawIO))
     {
         printf("Couldn't set pipe policy: %d\n", GetLastError());
         closeDevice();
-        return false;
+        throw std::runtime_error("Couldn't set pipe policy");
     }
-
-    return true;
 }
 
-void win_dscapture_deinit()
+DSCapture::~DSCapture()
 {
     closeDevice();
 }
 
-bool win_dscapture_grabFrame(uint16_t* frameBuffer)
+bool DSCapture::grabFrame(uint16_t* frameBuffer)
 {
     static uint16_t tmpBuf[DS_FRAME_SIZE / sizeof(uint16_t)];
     static uint8_t frameInfo[DS_INFO_SIZE];
@@ -76,7 +75,7 @@ bool win_dscapture_grabFrame(uint16_t* frameBuffer)
         return false;
     }
 
-    int transferred;
+    ULONG transferred;
     bool result;
     int bytesIn = 0;
     uint8_t* p = ( uint8_t*) tmpBuf;
@@ -124,57 +123,57 @@ bool win_dscapture_grabFrame(uint16_t* frameBuffer)
     return true;
 }
 
-HRESULT openDevice()
+HRESULT DSCapture::openDevice()
 {
     HRESULT hr = S_OK;
 
-    deviceData.handlesOpen = false;
-    hr = retrieveDevicePath(deviceData.devicePath, sizeof(deviceData.devicePath));
+    handlesOpen = false;
+    hr = retrieveDevicePath(devicePath, sizeof(devicePath));
 
     if (FAILED(hr))
     {
         return hr;
     }
 
-    deviceData.deviceHandle = CreateFile(deviceData.devicePath,
-                                         GENERIC_WRITE | GENERIC_READ,
-                                         FILE_SHARE_WRITE | FILE_SHARE_READ,
-                                         NULL,
-                                         OPEN_EXISTING,
-                                         FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED,
-                                         NULL);
+    deviceHandle = CreateFile(devicePath,
+                              GENERIC_WRITE | GENERIC_READ,
+                              FILE_SHARE_WRITE | FILE_SHARE_READ,
+                              NULL,
+                              OPEN_EXISTING,
+                              FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED,
+                              NULL);
 
-    if (deviceData.deviceHandle == INVALID_HANDLE_VALUE)
+    if (deviceHandle == INVALID_HANDLE_VALUE)
     {
         hr = HRESULT_FROM_WIN32(GetLastError());
         return hr;
     }
 
-    bool initialized = WinUsb_Initialize(deviceData.deviceHandle, &deviceData.winusbHandle);
+    bool initialized = WinUsb_Initialize(deviceHandle, &winusbHandle);
     if (initialized == false)
     {
         hr = HRESULT_FROM_WIN32(GetLastError());
-        CloseHandle(deviceData.deviceHandle);
+        CloseHandle(deviceHandle);
         return hr;
     }
 
-    deviceData.handlesOpen = true;
+    handlesOpen = true;
     return hr;
 }
 
-void closeDevice()
+void DSCapture::closeDevice()
 {
-    if (!deviceData.handlesOpen)
+    if (!handlesOpen)
     {
         return;
     }
 
-    WinUsb_Free(deviceData.winusbHandle);
-    CloseHandle(deviceData.deviceHandle);
-    deviceData.handlesOpen = false;
+    WinUsb_Free(winusbHandle);
+    CloseHandle(deviceHandle);
+    handlesOpen = false;
 }
 
-HRESULT retrieveDevicePath(char* path, ULONG bufLen)
+HRESULT DSCapture::retrieveDevicePath(char* path, ULONG bufLen)
 {
     CONFIGRET cr = CR_SUCCESS;
     HRESULT hr = S_OK;
@@ -239,9 +238,9 @@ HRESULT retrieveDevicePath(char* path, ULONG bufLen)
     return hr;
 }
 
-bool queryDeviceEndpoints()
+bool DSCapture::queryDeviceEndpoints()
 {
-    if (deviceData.winusbHandle == INVALID_HANDLE_VALUE)
+    if (winusbHandle == INVALID_HANDLE_VALUE)
     {
         return false;
     }
@@ -253,12 +252,12 @@ bool queryDeviceEndpoints()
     WINUSB_PIPE_INFORMATION pipe;
     ZeroMemory(&pipe, sizeof(WINUSB_PIPE_INFORMATION));
 
-    result = WinUsb_QueryInterfaceSettings(deviceData.winusbHandle, 0, &interfaceDescriptor);
+    result = WinUsb_QueryInterfaceSettings(winusbHandle, 0, &interfaceDescriptor);
     if (result)
     {
         for (int i = 0; i < interfaceDescriptor.bNumEndpoints; i++)
         {
-            result = WinUsb_QueryPipe(deviceData.winusbHandle, 0, i, &pipe);
+            result = WinUsb_QueryPipe(winusbHandle, 0, i, &pipe);
             if (result)
             {
                 if (pipe.PipeType == UsbdPipeTypeBulk)
@@ -266,8 +265,8 @@ bool queryDeviceEndpoints()
                     if (USB_ENDPOINT_DIRECTION_IN(pipe.PipeId))
                     {
                         printf("Endpoint index: %d - Pipe type: Bulk - Pipe ID: 0x%x - Maximum packet size: %d\n", i, pipe.PipeId, pipe.MaximumPacketSize);
-                        deviceData.bulkPipeInId = pipe.PipeId;
-                        deviceData.maxPacketSize = pipe.MaximumPacketSize;
+                        bulkPipeInId = pipe.PipeId;
+                        maxPacketSize = pipe.MaximumPacketSize;
                     }
                 }
             }
@@ -277,9 +276,9 @@ bool queryDeviceEndpoints()
     return result;
 }
 
-bool sendToDefaultEndpoint(uint8_t request, uint16_t value, uint16_t length, uint8_t *buf)
+bool DSCapture::sendToDefaultEndpoint(uint8_t request, uint16_t value, uint16_t length, uint8_t *buf)
 {
-    if (deviceData.winusbHandle == INVALID_HANDLE_VALUE)
+    if (winusbHandle == INVALID_HANDLE_VALUE)
     {
         return false;
     }
@@ -300,13 +299,13 @@ bool sendToDefaultEndpoint(uint8_t request, uint16_t value, uint16_t length, uin
     setupPacket.Length = length;
 
     unsigned long sent;
-    result = WinUsb_ControlTransfer(deviceData.winusbHandle, setupPacket, buf, length, &sent, 0);
+    result = WinUsb_ControlTransfer(winusbHandle, setupPacket, buf, length, &sent, 0);
     return result;
 }
 
-bool recvFromDefaultEndpoint(uint8_t request, uint16_t length, uint8_t* buf)
+bool DSCapture::recvFromDefaultEndpoint(uint8_t request, uint16_t length, uint8_t* buf)
 {
-    if (deviceData.winusbHandle == INVALID_HANDLE_VALUE)
+    if (winusbHandle == INVALID_HANDLE_VALUE)
     {
         return false;
     }
@@ -327,27 +326,27 @@ bool recvFromDefaultEndpoint(uint8_t request, uint16_t length, uint8_t* buf)
     setupPacket.Length = length;
 
     unsigned long sent;
-    result = WinUsb_ControlTransfer(deviceData.winusbHandle, setupPacket, buf, length, &sent, NULL);
+    result = WinUsb_ControlTransfer(winusbHandle, setupPacket, buf, length, &sent, NULL);
     return result;
 }
 
-bool readFromBulk(uint8_t* buf, int length, int* transferred)
+bool DSCapture::readFromBulk(uint8_t* buf, int length, PULONG transferred)
 {
-    if (deviceData.winusbHandle == INVALID_HANDLE_VALUE)
+    if (winusbHandle == INVALID_HANDLE_VALUE)
     {
         return false;
     }
     
     bool result = true;
-    result = WinUsb_ReadPipe(deviceData.winusbHandle, deviceData.bulkPipeInId, buf, length, transferred, NULL);
+    result = WinUsb_ReadPipe(winusbHandle, bulkPipeInId, buf, length, transferred, NULL);
     return result;
 }
 
-bool getMaximumTransferSize(unsigned long* mts)
+bool DSCapture::getMaximumTransferSize(unsigned long* mts)
 {
     unsigned long length = sizeof(unsigned long);
 
-    bool result = WinUsb_GetPipePolicy(deviceData.winusbHandle, deviceData.bulkPipeInId, 0x08, &length, mts);
+    bool result = WinUsb_GetPipePolicy(winusbHandle, bulkPipeInId, 0x08, &length, mts);
     if (!result)
     {
         printf("Couldn't get maximum transfer size: %d\n", GetLastError());

@@ -1,7 +1,6 @@
 #include <SDL.h>
-#include <memory.h>
-#include <stdio.h>
-#include <stdbool.h>
+#include <cstdio>
+#include <stdexcept>
 #include "win_dscapture.h"
 #include "screenmodes.h"
 
@@ -9,11 +8,10 @@ const int SCREEN_WIDTH = DS_WIDTH;
 const int SCREEN_HEIGHT = DS_HEIGHT * 2;
 
 bool init(SDL_Window** window, SDL_Renderer** renderer, SDL_Texture** texture);
-void captureFrame(uint16_t* dsFrameBuffer, uint8_t* rgbaFrameBuffer, SDL_Texture* texture);
+void captureFrame(DSCapture* capture, uint16_t* dsFrameBuffer, SDL_Texture* texture);
 void destroyAll(SDL_Window* window, SDL_Renderer* renderer, SDL_Texture* texture);
 void resizeWindow(SDL_Window* window, int scale, screen_mode mode);
 void setWindowTitle(SDL_Window* window, screen_mode mode, unsigned int framerate);
-void BGRtoRGBA(uint8_t* out, uint16_t* in);
 
 int main(int argc, char* argv[])
 {
@@ -21,14 +19,15 @@ int main(int argc, char* argv[])
     SDL_Renderer* renderer = NULL;
     SDL_Texture* texture = NULL;
     SDL_Event event;
-    uint16_t* dsFrameBuffer = malloc(sizeof(uint16_t) * DS_WIDTH * DS_HEIGHT * 2);
-    uint8_t* rgbaFrameBuffer = malloc(sizeof(uint8_t) * DS_WIDTH * DS_HEIGHT * 2 * 4);
+    uint16_t* dsFrameBuffer = new uint16_t[DS_WIDTH * DS_HEIGHT * 2];
     bool quit = false;
     int scale = 1;
     screen_mode screenMode = Vertical;
     unsigned int frameCounter = 0;
     unsigned int lastTime = 0;
     unsigned int currentTime;
+    
+    DSCapture dscapture;
 
     if (!init(&window, &renderer, &texture))
     {
@@ -66,14 +65,14 @@ int main(int argc, char* argv[])
                         resizeWindow(window, scale, screenMode);
                         break;
                     case SDLK_m:
-                        screenMode = (screenMode + 1) % NUM_SCREEN_MODES;
+                        screenMode = static_cast<screen_mode>((screenMode + 1) % NUM_SCREEN_MODES);
                         resizeWindow(window, scale, screenMode);
                         break;
                 }
             }
         }
 
-        captureFrame(dsFrameBuffer, rgbaFrameBuffer, texture);
+        captureFrame(&dscapture, dsFrameBuffer, texture);
 
         SDL_Rect src = getSrcRectForMode(screenMode);
         if (screenMode == Horizontal)
@@ -105,8 +104,7 @@ int main(int argc, char* argv[])
 
     destroyAll(window, renderer, texture);
 
-    free(dsFrameBuffer);
-    free(rgbaFrameBuffer);
+    delete [] dsFrameBuffer;
 
     SDL_Quit();
     return 0;
@@ -144,38 +142,29 @@ bool init(SDL_Window ** window, SDL_Renderer ** renderer, SDL_Texture ** texture
         return false;
     }
 
-    if (!win_dscapture_init())
-    {
-        printf("Could not initialize DS capture\n");
-        return false;
-    }
-
     return true;
 }
 
-void captureFrame(uint16_t* dsFrameBuffer, uint8_t* rgbaFrameBuffer, SDL_Texture* texture)
+void captureFrame(DSCapture* dscapture, uint16_t* dsFrameBuffer, SDL_Texture* texture)
 {
     static void* pixels;
     static int pitch;
 
-    if (!win_dscapture_grabFrame(dsFrameBuffer))
+    if (!dscapture->grabFrame(dsFrameBuffer))
     {
         printf("Could not grab frame from DS capture\n");
     }
     else
     {
-        //BGRtoRGBA(rgbaFrameBuffer, dsFrameBuffer);
         SDL_LockTexture(texture, NULL, &pixels, &pitch);
         memcpy(pixels, dsFrameBuffer, DS_WIDTH * DS_HEIGHT * 2 * 2);
         SDL_UnlockTexture(texture);
     }
 }
 
-// Destroys SDL objects and deinitializes DS capture.
+// Destroys SDL objects
 void destroyAll(SDL_Window* window, SDL_Renderer* renderer, SDL_Texture* texture)
 {
-    win_dscapture_deinit();
-
     SDL_DestroyTexture(texture);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
@@ -219,23 +208,4 @@ void setWindowTitle(SDL_Window* window, screen_mode mode, unsigned int framerate
             break;
     }
     SDL_SetWindowTitle(window, buffer);
-}
-
-// Taken from the DS capture sample code, don't understand the magic values yet
-void BGRtoRGBA(uint8_t* out, uint16_t* in)
-{
-    for (int i = 0; i < DS_WIDTH * DS_HEIGHT * 2; i++)
-    {
-        unsigned char r, g, b;
-        g = ((*in) >> 5) & 0x3f;
-        b = ((*in << 1) & 0x3e) | (g & 1);
-        r = (((*in) >> 10) & 0x3e) | (g & 1);
-        // Make sure it's little endianness (so ABGR instead of RGBA)
-        out[0] = 255;
-        out[1] = (b << 2) | (b >> 4);
-        out[2] = (g << 2) | (g >> 4);
-        out[3] = (r << 2) | (r >> 4);
-        out += 4;
-        in++;
-    }
 }

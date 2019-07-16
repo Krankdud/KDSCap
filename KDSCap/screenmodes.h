@@ -8,7 +8,7 @@
 
 typedef enum
 {
-    Vertical,
+    Vertical = 0,
     Horizontal,
     GBATop,
     GBABottom

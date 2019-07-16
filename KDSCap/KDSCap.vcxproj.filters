@@ -15,13 +15,13 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.c">
+    <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="screenmodes.c">
+    <ClCompile Include="screenmodes.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="win_dscapture.c">
+    <ClCompile Include="win_dscapture.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
