@@ -1,4 +1,5 @@
 #include <stdexcept>
+#include <thread>
 #include "win_dscapture.h"
 
 typedef struct _UsbDeviceRequest
@@ -121,6 +122,87 @@ bool DSCapture::grabFrame(uint16_t* frameBuffer)
     }
 
     return true;
+}
+
+void DSCapture::startCapture(uint16_t* frameBuffer, std::mutex* mutex)
+{
+    doCapture = true;
+    for (int i = 0; i < DS_THREADS; ++i)
+    {
+        captureThreads[i] = std::thread(&DSCapture::captureFrame, this, frameBuffer, mutex);
+    }
+}
+
+void DSCapture::endCapture()
+{
+    doCapture = false;
+    for (int i = 0; i < DS_THREADS; ++i)
+    {
+        captureThreads[i].join();
+    }
+}
+
+void DSCapture::captureFrame(uint16_t* frameBuffer, std::mutex* mutex)
+{
+    while (doCapture)
+    {
+        static uint16_t tmpBuf[DS_FRAME_SIZE / sizeof(uint16_t)];
+        static uint8_t frameInfo[DS_INFO_SIZE];
+
+        uint8_t dummy;
+        if (!sendToDefaultEndpoint(DS_CMDOUT_CAPTURE_START, 0, 0, &dummy))
+        {
+            return;
+        }
+
+        ULONG transferred;
+        bool result;
+        int bytesIn = 0;
+        uint8_t* p = ( uint8_t*) tmpBuf;
+        do
+        {
+            result = readFromBulk(p, DS_FRAME_SIZE - bytesIn, &transferred);
+            if (result)
+            {
+                bytesIn += transferred;
+                p += transferred;
+            }
+        } while (bytesIn < DS_FRAME_SIZE && result && transferred > 0);
+
+        if (!result)
+            return;
+        if (!recvFromDefaultEndpoint(DS_CMDIN_FRAMEINFO, DS_INFO_SIZE, frameInfo))
+            return;
+        if ((frameInfo[0] & 3) != 3)
+            return;
+        if (!frameInfo[52])
+            return;
+
+        uint16_t* src = tmpBuf;
+        uint16_t* dst = frameBuffer;
+        {
+            std::lock_guard<std::mutex> lock(*mutex);
+            for (int line = 0; line < DS_LCD_HEIGHT * 2; ++line)
+            {
+                if (frameInfo[line >> 3] & (1 << (line & 7)))
+                {
+                    for (int i = 0; i < DS_LCD_WIDTH / 2; ++i)
+                    {
+                        dst[0] = src[1];
+                        dst[DS_LCD_WIDTH * DS_LCD_HEIGHT] = src[0];
+                        dst++;
+                        src += 2;
+                    }
+                }
+                else
+                {
+                    memcpy(dst, dst - 256, 256);
+                    memcpy(dst + 256 * 192, dst + 256 * 191, 256);
+                    dst += 128;
+                }
+            }
+        }
+    }
 }
 
 HRESULT DSCapture::openDevice()

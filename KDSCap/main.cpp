@@ -1,6 +1,7 @@
 #include <SDL.h>
 #include <cstdio>
 #include <stdexcept>
+#include <mutex>
 #include "win_dscapture.h"
 #include "screenmodes.h"
 
@@ -8,7 +9,7 @@ const int SCREEN_WIDTH = DS_WIDTH;
 const int SCREEN_HEIGHT = DS_HEIGHT * 2;
 
 bool init(SDL_Window** window, SDL_Renderer** renderer, SDL_Texture** texture);
-void captureFrame(DSCapture* capture, uint16_t* dsFrameBuffer, SDL_Texture* texture);
+void captureFrame(uint16_t* dsFrameBuffer, SDL_Texture* texture, std::mutex* mutex);
 void destroyAll(SDL_Window* window, SDL_Renderer* renderer, SDL_Texture* texture);
 void resizeWindow(SDL_Window* window, int scale, screen_mode mode);
 void setWindowTitle(SDL_Window* window, screen_mode mode, unsigned int framerate);
@@ -26,6 +27,7 @@ int main(int argc, char* argv[])
     unsigned int frameCounter = 0;
     unsigned int lastTime = 0;
     unsigned int currentTime;
+    std::mutex mutex;
     
     DSCapture dscapture;
 
@@ -33,6 +35,8 @@ int main(int argc, char* argv[])
     {
         return 1;
     }
+
+    dscapture.startCapture(dsFrameBuffer, &mutex);
 
     while (!quit)
     {
@@ -72,7 +76,7 @@ int main(int argc, char* argv[])
             }
         }
 
-        captureFrame(&dscapture, dsFrameBuffer, texture);
+        captureFrame(dsFrameBuffer, texture, &mutex);
 
         SDL_Rect src = getSrcRectForMode(screenMode);
         if (screenMode == Horizontal)
@@ -101,6 +105,8 @@ int main(int argc, char* argv[])
             lastTime = currentTime;
         }
     }
+
+    dscapture.endCapture();
 
     destroyAll(window, renderer, texture);
 
@@ -145,21 +151,16 @@ bool init(SDL_Window ** window, SDL_Renderer ** renderer, SDL_Texture ** texture
     return true;
 }
 
-void captureFrame(DSCapture* dscapture, uint16_t* dsFrameBuffer, SDL_Texture* texture)
+void captureFrame(uint16_t* dsFrameBuffer, SDL_Texture* texture, std::mutex* mutex)
 {
     static void* pixels;
     static int pitch;
 
-    if (!dscapture->grabFrame(dsFrameBuffer))
-    {
-        printf("Could not grab frame from DS capture\n");
-    }
-    else
-    {
-        SDL_LockTexture(texture, NULL, &pixels, &pitch);
-        memcpy(pixels, dsFrameBuffer, DS_WIDTH * DS_HEIGHT * 2 * 2);
-        SDL_UnlockTexture(texture);
-    }
+    std::lock_guard<std::mutex> lock(*mutex);
+
+    SDL_LockTexture(texture, NULL, &pixels, &pitch);
+    memcpy(pixels, dsFrameBuffer, DS_WIDTH * DS_HEIGHT * 2 * 2);
+    SDL_UnlockTexture(texture);
 }
 
 // Destroys SDL objects
