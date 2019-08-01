@@ -65,42 +65,20 @@ DSCapture::~DSCapture()
     closeDevice();
 }
 
-bool DSCapture::grabFrame(uint16_t* frameBuffer)
+void DSCapture::grabFrame(uint16_t* outputBuffer)
 {
-    static uint16_t tmpBuf[DS_FRAME_SIZE / sizeof(uint16_t)];
-    static uint8_t frameInfo[DS_INFO_SIZE];
+    static int bufferPos = 0;
 
-    uint8_t dummy;
-    if (!sendToDefaultEndpoint(DS_CMDOUT_CAPTURE_START, 0, 0, &dummy))
-    {
-        return false;
-    }
+    if (framesInBuffer == 0) return;
 
-    ULONG transferred;
-    bool result;
-    int bytesIn = 0;
-    uint8_t* p = ( uint8_t*) tmpBuf;
-    do
-    {
-        result = readFromBulk(p, DS_FRAME_SIZE - bytesIn, &transferred);
-        if (result)
-        {
-            bytesIn += transferred;
-            p += transferred;
-        }
-    } while (bytesIn < DS_FRAME_SIZE && result && transferred > 0);
-
-    if (!result)
-        return false;
-    if (!recvFromDefaultEndpoint(DS_CMDIN_FRAMEINFO, DS_INFO_SIZE, frameInfo))
-        return false;
+    uint8_t* frameInfo = frameInfoBuffer + bufferPos * DS_INFO_SIZE;
     if ((frameInfo[0] & 3) != 3)
-        return false;
+        return;
     if (!frameInfo[52])
-        return false;
+        return;
 
-    uint16_t* src = tmpBuf;
-    uint16_t* dst = frameBuffer;
+    uint16_t* src = frameBuffer + bufferPos * DS_FRAME_SIZE / sizeof(uint16_t);
+    uint16_t* dst = outputBuffer;
     for (int line = 0; line < DS_LCD_HEIGHT * 2; ++line)
     {
         if (frameInfo[line >> 3] & (1 << (line & 7)))
@@ -121,15 +99,19 @@ bool DSCapture::grabFrame(uint16_t* frameBuffer)
         }
     }
 
-    return true;
+    --framesInBuffer;
+    bufferPos = (bufferPos + 1) % DS_BUFFER_SIZE;
 }
 
-void DSCapture::startCapture(uint16_t* frameBuffer, std::mutex* mutex)
+void DSCapture::startCapture()
 {
+    frameBuffer = new uint16_t[DS_FRAME_SIZE / sizeof(uint16_t) * DS_BUFFER_SIZE];
+    frameInfoBuffer = new uint8_t[DS_INFO_SIZE * DS_BUFFER_SIZE];
+
     doCapture = true;
     for (int i = 0; i < DS_THREADS; ++i)
     {
-        captureThreads[i] = std::thread(&DSCapture::captureFrame, this, frameBuffer, mutex);
+        captureThreads[i] = std::thread(&DSCapture::captureFrame, this);
     }
 }
 
@@ -140,14 +122,21 @@ void DSCapture::endCapture()
     {
         captureThreads[i].join();
     }
+
+    delete[] frameBuffer;
+    delete[] frameInfoBuffer;
 }
 
-void DSCapture::captureFrame(uint16_t* frameBuffer, std::mutex* mutex)
+void DSCapture::captureFrame()
 {
+    static int bufferPos = 0;
+
     while (doCapture)
     {
-        static uint16_t tmpBuf[DS_FRAME_SIZE / sizeof(uint16_t)];
-        static uint8_t frameInfo[DS_INFO_SIZE];
+        if (framesInBuffer >= DS_BUFFER_SIZE)
+        {
+            continue;
+        }
 
         uint8_t dummy;
         if (!sendToDefaultEndpoint(DS_CMDOUT_CAPTURE_START, 0, 0, &dummy))
@@ -158,7 +147,7 @@ void DSCapture::captureFrame(uint16_t* frameBuffer, std::mutex* mutex)
         ULONG transferred;
         bool result;
         int bytesIn = 0;
-        uint8_t* p = ( uint8_t*) tmpBuf;
+        uint8_t* p = ( uint8_t*) (frameBuffer + bufferPos * DS_FRAME_SIZE / sizeof(uint16_t));
         do
         {
             result = readFromBulk(p, DS_FRAME_SIZE - bytesIn, &transferred);
@@ -169,39 +158,17 @@ void DSCapture::captureFrame(uint16_t* frameBuffer, std::mutex* mutex)
             }
         } while (bytesIn < DS_FRAME_SIZE && result && transferred > 0);
 
+        uint8_t* frameInfo = frameInfoBuffer + bufferPos * DS_INFO_SIZE;
+
         if (!result)
             return;
         if (!recvFromDefaultEndpoint(DS_CMDIN_FRAMEINFO, DS_INFO_SIZE, frameInfo))
             return;
-        if ((frameInfo[0] & 3) != 3)
-            return;
-        if (!frameInfo[52])
-            return;
 
-        uint16_t* src = tmpBuf;
-        uint16_t* dst = frameBuffer;
-        {
-            std::lock_guard<std::mutex> lock(*mutex);
-            for (int line = 0; line < DS_LCD_HEIGHT * 2; ++line)
-            {
-                if (frameInfo[line >> 3] & (1 << (line & 7)))
-                {
-                    for (int i = 0; i < DS_LCD_WIDTH / 2; ++i)
-                    {
-                        dst[0] = src[1];
-                        dst[DS_LCD_WIDTH * DS_LCD_HEIGHT] = src[0];
-                        dst++;
-                        src += 2;
-                    }
-                }
-                else
-                {
-                    memcpy(dst, dst - 256, 256);
-                    memcpy(dst + 256 * 192, dst + 256 * 191, 256);
-                    dst += 128;
-                }
-            }
-        }
+        ++framesInBuffer;
+        if (framesInBuffer > 1)
+            printf("Frames in buffer: %d\n", (int) framesInBuffer);
+        bufferPos = (bufferPos + 1) % DS_BUFFER_SIZE;
     }
 }
 

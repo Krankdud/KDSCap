@@ -9,7 +9,7 @@ const int SCREEN_WIDTH = DS_WIDTH;
 const int SCREEN_HEIGHT = DS_HEIGHT * 2;
 
 bool init(SDL_Window** window, SDL_Renderer** renderer, SDL_Texture** texture);
-void captureFrame(uint16_t* dsFrameBuffer, SDL_Texture* texture, std::mutex* mutex);
+void captureFrame(DSCapture& capture, uint16_t* dsFrameBuffer, SDL_Texture* texture);
 void destroyAll(SDL_Window* window, SDL_Renderer* renderer, SDL_Texture* texture);
 void resizeWindow(SDL_Window* window, int scale, screen_mode mode);
 void setWindowTitle(SDL_Window* window, screen_mode mode, unsigned int framerate);
@@ -27,7 +27,6 @@ int main(int argc, char* argv[])
     unsigned int frameCounter = 0;
     unsigned int lastTime = 0;
     unsigned int currentTime;
-    std::mutex mutex;
     
     DSCapture dscapture;
 
@@ -36,7 +35,7 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    dscapture.startCapture(dsFrameBuffer, &mutex);
+    dscapture.startCapture();
 
     while (!quit)
     {
@@ -76,7 +75,7 @@ int main(int argc, char* argv[])
             }
         }
 
-        captureFrame(dsFrameBuffer, texture, &mutex);
+        captureFrame(dscapture, dsFrameBuffer, texture);
 
         SDL_Rect src = getSrcRectForMode(screenMode);
         if (screenMode == Horizontal)
@@ -151,12 +150,12 @@ bool init(SDL_Window ** window, SDL_Renderer ** renderer, SDL_Texture ** texture
     return true;
 }
 
-void captureFrame(uint16_t* dsFrameBuffer, SDL_Texture* texture, std::mutex* mutex)
+void captureFrame(DSCapture& capture, uint16_t* dsFrameBuffer, SDL_Texture* texture)
 {
     static void* pixels;
     static int pitch;
 
-    std::lock_guard<std::mutex> lock(*mutex);
+    capture.grabFrame(dsFrameBuffer);
 
     SDL_LockTexture(texture, NULL, &pixels, &pitch);
     memcpy(pixels, dsFrameBuffer, DS_WIDTH * DS_HEIGHT * 2 * 2);

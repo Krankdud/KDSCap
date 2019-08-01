@@ -21,15 +21,16 @@ DEFINE_GUID(GUID_DSCapture,
 #define DS_LCD_WIDTH 256
 #define DS_LCD_HEIGHT 192
 #define DS_FRAME_SIZE 1024 * DS_LCD_HEIGHT
-#define DS_THREADS 4
+#define DS_BUFFER_SIZE 8
+#define DS_THREADS 1
 
 class DSCapture
 {
 public:
     DSCapture();
     ~DSCapture();
-    bool grabFrame(uint16_t* frameBuffer);
-    void startCapture(uint16_t* frameBuffer, std::mutex* mutex);
+    void grabFrame(uint16_t* frameBuffer);
+    void startCapture();
     void endCapture();
 
 private:
@@ -40,12 +41,16 @@ private:
     unsigned char bulkPipeInId;
     unsigned short maxPacketSize;
 
+    uint16_t* frameBuffer;
+    uint8_t* frameInfoBuffer;
+
     std::atomic_bool doCapture;
+    std::atomic_int framesInBuffer;
     std::thread captureThreads[DS_THREADS];
 
     HRESULT openDevice();
     void closeDevice();
-    void captureFrame(uint16_t* frameBuffer, std::mutex* mutex);
+    void captureFrame();
     HRESULT retrieveDevicePath(char* path, ULONG buflen);
     bool queryDeviceEndpoints();
     bool sendToDefaultEndpoint(uint8_t request, uint16_t value, uint16_t length, uint8_t* buf);
