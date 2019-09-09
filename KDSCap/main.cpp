@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <stdexcept>
 #include <mutex>
+#include "audiorecorder.h"
 #include "win_dscapture.h"
 #include "screenmodes.h"
 
@@ -13,6 +14,7 @@ void captureFrame(DSCapture& capture, uint16_t* dsFrameBuffer, SDL_Texture* text
 void destroyAll(SDL_Window* window, SDL_Renderer* renderer, SDL_Texture* texture);
 void resizeWindow(SDL_Window* window, int scale, screen_mode mode);
 void setWindowTitle(SDL_Window* window, screen_mode mode, unsigned int framerate);
+void showAudioDevices();
 
 int main(int argc, char* argv[])
 {
@@ -34,6 +36,9 @@ int main(int argc, char* argv[])
     {
         return 1;
     }
+
+    AudioRecorder audioRecorder;
+    audioRecorder.start();
 
     dscapture.startCapture();
 
@@ -105,6 +110,7 @@ int main(int argc, char* argv[])
         }
     }
 
+    audioRecorder.stop();
     dscapture.endCapture();
 
     destroyAll(window, renderer, texture);
@@ -119,7 +125,7 @@ int main(int argc, char* argv[])
 // Returns false if an error occurred.
 bool init(SDL_Window ** window, SDL_Renderer ** renderer, SDL_Texture ** texture)
 {
-    if (SDL_Init(SDL_INIT_VIDEO) < 0)
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0)
     {
         printf("Could not initialize SDL: %s\n", SDL_GetError());
         return false;

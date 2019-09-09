@@ -24,12 +24,18 @@
     <ClCompile Include="win_dscapture.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="audiorecorder.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="screenmodes.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="win_dscapture.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="audiorecorder.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
