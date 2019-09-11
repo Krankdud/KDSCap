@@ -4,7 +4,7 @@
 
 AudioRecorder::AudioRecorder()
 {
-    codec = avcodec_find_encoder(AV_CODEC_ID_MP2);
+    codec = avcodec_find_encoder(AV_CODEC_ID_MP3);
     if (!codec)
     {
         throw std::runtime_error("Codec not found");
@@ -15,18 +15,21 @@ AudioRecorder::AudioRecorder()
     {
         throw std::runtime_error("Could not allocate audio codec context");
     }
+
     context->bit_rate = 128000;
-    context->sample_fmt = AV_SAMPLE_FMT_S16;
+    context->sample_fmt = AV_SAMPLE_FMT_FLTP;
     context->sample_rate = 44100;
     context->channel_layout = AV_CH_LAYOUT_STEREO;
-    context->channels = 2;
+    context->channels = av_get_channel_layout_nb_channels(context->channel_layout);
 
-    if (avcodec_open2(context, codec, NULL) < 0)
+    int av_error = avcodec_open2(context, codec, NULL);
+    if (av_error < 0)
     {
+        printError(av_error);
         throw std::runtime_error("Could not open codec");
     }
 
-    auto error = fopen_s(&output, "audio.mp2", "wb");
+    auto error = fopen_s(&output, "audio.mp3", "wb");
     if (error != 0)
     {
         throw std::runtime_error("Could not open file");
@@ -38,25 +41,17 @@ AudioRecorder::AudioRecorder()
         throw std::runtime_error("Could not allocate audio packet");
     }
 
-    frame = av_frame_alloc();
-    if (!frame)
-    {
-        throw std::runtime_error("Could not allocate audio frame");
-    }
+    frame = createFrame(context->frame_size, context->sample_fmt, context->channel_layout);
+    // Create a temporary frame for converting from SDL's floating point audio
+    // to floating point planar for the MP3 codec.
+    tempFrame = createFrame(context->frame_size, AV_SAMPLE_FMT_FLT, context->channel_layout);
 
-    frame->nb_samples = context->frame_size;
-    frame->format = context->sample_fmt;
-    frame->channel_layout = context->channel_layout;
-
-    if (av_frame_get_buffer(frame, 0) < 0)
-    {
-        throw std::runtime_error("Could not allocate audio data buffers");
-    }
+    initSwrContext();
 
     SDL_AudioSpec want;
     SDL_zero(want);
     want.freq = context->sample_rate;
-    want.format = AUDIO_S16;
+    want.format = AUDIO_F32;
     want.channels = context->channels;
     want.samples = context->frame_size;
     want.callback = [](void* userdata, uint8_t* stream, int len) -> void {
@@ -82,10 +77,12 @@ AudioRecorder::~AudioRecorder()
         SDL_CloseAudioDevice(device);
     }
 
-    fclose(output);
+    encode(NULL); // flush the encoder
     av_frame_free(&frame);
     av_packet_free(&packet);
     avcodec_free_context(&context);
+    swr_free(&swrContext);
+    fclose(output);
 }
 
 void AudioRecorder::start()
@@ -104,13 +101,27 @@ void AudioRecorder::recordingCallback(uint8_t* stream, int len)
     {
         throw std::runtime_error("Could not ensure that the audio frame is writable");
     }
+    if (av_frame_make_writable(tempFrame) < 0)
+    {
+        throw std::runtime_error("Could not ensure that the audio frame is writable");
+    }
 
-    avcodec_fill_audio_frame(frame, 2, AV_SAMPLE_FMT_S16, stream, len, 0);
+    int av_error = avcodec_fill_audio_frame(tempFrame, 2, AV_SAMPLE_FMT_FLT, stream, len, 0);
+    if (av_error < 0)
+    {
+        printError(av_error);
+    }
 
-    encode();
+    av_error = swr_convert_frame(swrContext, frame, tempFrame);
+    if (av_error < 0)
+    {
+        printError(av_error);
+    }
+
+    encode(frame);
 }
 
-void AudioRecorder::encode()
+void AudioRecorder::encode(AVFrame* frame)
 {
     int ret;
     ret = avcodec_send_frame(context, frame);
@@ -125,4 +136,49 @@ void AudioRecorder::encode()
         fwrite(packet->data, 1, packet->size, output);
         av_packet_unref(packet);
     }
+}
+
+void AudioRecorder::printError(int code)
+{
+    char buffer[1024];
+    av_make_error_string(buffer, 1024, code);
+    printf(buffer);
+    printf("\n");
+}
+
+void AudioRecorder::initSwrContext()
+{
+    swrContext = swr_alloc_set_opts(swrContext,
+                                    context->channel_layout,
+                                    context->sample_fmt,
+                                    context->sample_rate,
+                                    context->channel_layout,
+                                    AV_SAMPLE_FMT_FLT,
+                                    context->sample_rate,
+                                    0,
+                                    NULL);
+    swr_init(swrContext);
+}
+
+AVFrame* AudioRecorder::createFrame(int samples, int format, uint64_t channels)
+{
+    AVFrame* frame = av_frame_alloc();
+    if (!frame)
+    {
+        throw std::runtime_error("Could not allocate audio frame");
+    }
+
+    frame->nb_samples = samples;
+    frame->format = format;
+    frame->channel_layout = channels;
+    frame->sample_rate = context->sample_rate;
+
+    int av_error = av_frame_get_buffer(frame, 0);
+    if (av_error < 0)
+    {
+        printError(av_error);
+        throw std::runtime_error("Could not allocate audio data buffers");
+    }
+
+    return frame;
 }

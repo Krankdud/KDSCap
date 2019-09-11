@@ -5,6 +5,7 @@
 extern "C"
 {
     #include <libavcodec/avcodec.h>
+    #include <libswresample/swresample.h>
 }
 
 class AudioRecorder
@@ -24,10 +25,16 @@ private:
 
     const AVCodec* codec;
     AVCodecContext* context;
-    AVFrame* frame;
+    AVFrame* frame, *tempFrame;
     AVPacket* packet;
+
+    SwrContext* swrContext;
 
     FILE* output;
 
-    void encode();
+    AVFrame* createFrame(int samples, int format, uint64_t channels);
+    void initSwrContext();
+
+    void encode(AVFrame* frame);
+    void printError(int code);
 };
