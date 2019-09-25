@@ -134,11 +134,13 @@
     <ClCompile Include="audiorecorder.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="screenmodes.cpp" />
+    <ClCompile Include="videoencoder.cpp" />
     <ClCompile Include="win_dscapture.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="audiorecorder.h" />
     <ClInclude Include="screenmodes.h" />
+    <ClInclude Include="videoencoder.h" />
     <ClInclude Include="win_dscapture.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <mutex>
 #include "audiorecorder.h"
+#include "videoencoder.h"
 #include "win_dscapture.h"
 #include "screenmodes.h"
 
@@ -10,11 +11,10 @@ const int SCREEN_WIDTH = DS_WIDTH;
 const int SCREEN_HEIGHT = DS_HEIGHT * 2;
 
 bool init(SDL_Window** window, SDL_Renderer** renderer, SDL_Texture** texture);
-void captureFrame(DSCapture& capture, uint16_t* dsFrameBuffer, SDL_Texture* texture);
+void captureFrame(DSCapture& capture, VideoEncoder& encoder, uint16_t* dsFrameBuffer, SDL_Texture* texture);
 void destroyAll(SDL_Window* window, SDL_Renderer* renderer, SDL_Texture* texture);
 void resizeWindow(SDL_Window* window, int scale, screen_mode mode);
 void setWindowTitle(SDL_Window* window, screen_mode mode, unsigned int framerate);
-void showAudioDevices();
 
 int main(int argc, char* argv[])
 {
@@ -37,6 +37,7 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    VideoEncoder videoEncoder;
     AudioRecorder audioRecorder;
     audioRecorder.start();
 
@@ -80,7 +81,7 @@ int main(int argc, char* argv[])
             }
         }
 
-        captureFrame(dscapture, dsFrameBuffer, texture);
+        captureFrame(dscapture, videoEncoder, dsFrameBuffer, texture);
 
         SDL_Rect src = getSrcRectForMode(screenMode);
         if (screenMode == Horizontal)
@@ -156,12 +157,13 @@ bool init(SDL_Window ** window, SDL_Renderer ** renderer, SDL_Texture ** texture
     return true;
 }
 
-void captureFrame(DSCapture& capture, uint16_t* dsFrameBuffer, SDL_Texture* texture)
+void captureFrame(DSCapture& capture, VideoEncoder& encoder, uint16_t* dsFrameBuffer, SDL_Texture* texture)
 {
     static void* pixels;
     static int pitch;
 
     capture.grabFrame(dsFrameBuffer);
+    encoder.sendFrame(dsFrameBuffer);
 
     SDL_LockTexture(texture, NULL, &pixels, &pitch);
     memcpy(pixels, dsFrameBuffer, DS_WIDTH * DS_HEIGHT * 2 * 2);

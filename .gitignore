@@ -406,3 +406,5 @@ MigrationBackup/
 # End of https://www.gitignore.io/api/c,visualstudio
 
 *.mp2
+*.mp3
+*.mp4
